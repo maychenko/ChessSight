@@ -1,0 +1,8 @@
+mss
+opencv-python
+python-chess
+mediapipe
+SpeechRecognition
+PyAudio
+pygame-ce
+pyautogui
