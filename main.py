@@ -9,7 +9,12 @@ import time
 import chess
 
 from capture import grab_board, load_region
-from board_reader import load_templates, changed_squares, infer_move_from_diff
+from board_reader import (
+    load_templates,
+    changed_squares,
+    infer_move_from_diff,
+    STABLE_MOVE_FRAMES,
+)
 from voice_commands import listen_once, parse_text_to_move
 from move_executor import execute_move
 
@@ -62,7 +67,7 @@ def wait_for_opponent_move(board, region, orientation, poll_interval=0.45, timeo
                     stable_count = 1
 
                 print(
-                    f"[CV] Кандидат: {_move_name(move)} "
+                    f"[CV] Кандидат: {move_name(move)} "
                     f"({stable_count}/{STABLE_MOVE_FRAMES})"
                 )
 
