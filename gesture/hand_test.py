@@ -4,10 +4,12 @@ import math
 from collections import deque, Counter
 
 
+
 CAMERA_INDEX = 0
 MAX_HANDS = 1
 
 STABLE_FRAMES = 5
+
 
 
 mp_hands = mp.solutions.hands
@@ -69,6 +71,7 @@ def angle(a, b, c):
 
     cos_value = dot / (len_ab * len_cb)
 
+    
     cos_value = max(-1.0, min(1.0, cos_value))
 
     return math.degrees(math.acos(cos_value))
@@ -121,15 +124,18 @@ def classify_gesture(landmarks):
     fingers = [index, middle, ring, pinky]
 
     # ✊
-
+    # Все четыре основных пальца согнуты
     if not any(fingers):
         return "FIST"
 
     # ✌️
+    # Указательный + средний вытянуты
+    # Безымянный + мизинец согнуты
     if index and middle and not ring and not pinky:
         return "TWO_FINGERS"
 
     # 🖐️
+    # Все четыре пальца вытянуты
     if all(fingers):
         return "OPEN_PALM"
 
@@ -190,6 +196,7 @@ while True:
 
     frame = cv2.flip(frame, 1)
 
+  
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
     result = hands.process(rgb)
@@ -200,20 +207,24 @@ while True:
 
         hand_landmarks = result.multi_hand_landmarks[0]
 
+      
         mp_draw.draw_landmarks(
             frame,
             hand_landmarks,
             mp_hands.HAND_CONNECTIONS
         )
 
+        
         raw_gesture = classify_gesture(
             hand_landmarks.landmark
         )
 
+    
     history.append(raw_gesture)
 
     gesture = stable_gesture(history)
 
+  
     cv2.rectangle(
         frame,
         (20, 20),
@@ -248,6 +259,7 @@ while True:
 
     if key == ord("q"):
         break
+
 
 
 cap.release()

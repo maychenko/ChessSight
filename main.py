@@ -79,10 +79,7 @@ def wait_for_opponent_move(board, region, orientation, poll_interval=0.45, timeo
                 stable_count = 0
 
         else:
-            # ВАЖНО:
-            # prev_img НЕ меняем.
-            # Мы продолжаем сравнивать с состоянием ДО хода.
-            pass
+           pass
 
     return None
 
@@ -160,7 +157,7 @@ def main():
     if args.one_move:
         print("Режим: ONE-MOVE (один реальный ход)")
 
-    # В dry-run экран вообще не нужен.
+
     if args.dry_run:
         region = None
     else:
@@ -171,7 +168,7 @@ def main():
 
     print_position(board)
 
-    # Если играем чёрными, первым ходит противник.
+    
     if my_color == chess.BLACK and not args.dry_run:
 
         print("\nЖду первый ход противника...")
@@ -200,9 +197,7 @@ def main():
 
     while not board.is_game_over():
 
-        # --------------------------------
-        # НАШ ХОД
-        # --------------------------------
+     
         if board.turn == my_color:
 
             print("\nТвой ход.")
@@ -218,11 +213,9 @@ def main():
 
                 print_position(board)
 
-                # ВАЖНО:
-                # dry-run заканчивается здесь.
+                
                 return
 
-            # Реальный ход
             execute_move(
                 move,
                 region,
@@ -238,19 +231,16 @@ def main():
 
             print_position(board)
 
-            # Тест одного реального хода
+        
             if args.one_move:
 
                 print("[one-move] Готово.")
 
                 return
 
-            # Ждём окончания анимации
             time.sleep(0.5)
 
-        # --------------------------------
-        # ХОД ПРОТИВНИКА
-        # --------------------------------
+    
         else:
 
             print("\nЖду ход противника...")
