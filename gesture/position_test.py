@@ -1,23 +1,37 @@
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
 import cv2
 import mediapipe as mp
+import math
 
-from collections import deque
+from collections import deque, Counter
 
-from gesture_classifier import (
-    classify_gesture,
-    GestureStabilizer
-)
-
-from gesture_controller import (
-    GestureController
-)
+from gesture.gesture_chess import GestureChess
+from gesture.gesture_classifier import classify_gesture
+from gesture.gesture_controller import GestureController
 
 
 CAMERA_INDEX = 0
 
+GESTURE_HISTORY_SIZE = 5
+SQUARE_STABLE_FRAMES = 4
 POSITION_HISTORY_SIZE = 5
-SQUARE_STABLE_FRAMES = 3
 
+
+
+mp_hands = mp.solutions.hands
+mp_draw = mp.solutions.drawing_utils
+
+hands = mp_hands.Hands(
+    static_image_mode=False,
+    max_num_hands=1,
+    min_detection_confidence=0.6,
+    min_tracking_confidence=0.6,
+)
 
 
 def point_to_square(x, y):
@@ -32,12 +46,10 @@ def point_to_square(x, y):
 
     file_name = files[file_index]
 
-
-
+  
     rank = 8 - row_index
 
     return f"{file_name}{rank}"
-
 
 
 def average_position(points):
@@ -51,48 +63,44 @@ def average_position(points):
     return x, y
 
 
-
 def get_palm_center(landmarks):
 
-    ids = [
-        0,   # wrist
-        5,   # index MCP
-        9,   # middle MCP
-        13,  # ring MCP
-        17   # pinky MCP
-    ]
+    ids = [0, 5, 9, 13, 17]
 
-    x = sum(
-        landmarks[i].x
-        for i in ids
-    ) / len(ids)
-
-    y = sum(
-        landmarks[i].y
-        for i in ids
-    ) / len(ids)
+    x = sum(landmarks[i].x for i in ids) / len(ids)
+    y = sum(landmarks[i].y for i in ids) / len(ids)
 
     return x, y
 
 
+def get_stable_gesture(history):
 
-def get_index_tip(landmarks):
+    if not history:
+        return "UNKNOWN"
 
-    point = landmarks[8]
+    counts = Counter(history)
 
-    return point.x, point.y
+    gesture, count = counts.most_common(1)[0]
+
+    if count >= 3:
+        return gesture
+
+    return "UNKNOWN"
 
 
+def get_stable_square(square_history):
 
-mp_hands = mp.solutions.hands
-mp_draw = mp.solutions.drawing_utils
+    if not square_history:
+        return None
 
-hands = mp_hands.Hands(
-    static_image_mode=False,
-    max_num_hands=1,
-    min_detection_confidence=0.6,
-    min_tracking_confidence=0.6
-)
+    counts = Counter(square_history)
+
+    square, count = counts.most_common(1)[0]
+
+    if count >= SQUARE_STABLE_FRAMES:
+        return square
+
+    return None
 
 
 cap = cv2.VideoCapture(
@@ -101,44 +109,27 @@ cap = cv2.VideoCapture(
 )
 
 if not cap.isOpened():
-
-    cap = cv2.VideoCapture(
-        CAMERA_INDEX
-    )
+    cap = cv2.VideoCapture(CAMERA_INDEX)
 
 if not cap.isOpened():
-    raise RuntimeError(
-        "Камера не найдена."
-    )
+    raise RuntimeError("Камера не найдена.")
+
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
 
-cap.set(
-    cv2.CAP_PROP_FRAME_WIDTH,
-    1280
+
+gesture_history = deque(
+    maxlen=GESTURE_HISTORY_SIZE
 )
-
-cap.set(
-    cv2.CAP_PROP_FRAME_HEIGHT,
-    720
-)
-
-
-
-gesture_stabilizer = GestureStabilizer(
-    size=5,
-    required=3
-)
-
 
 palm_positions = deque(
     maxlen=POSITION_HISTORY_SIZE
 )
 
-
 finger_positions = deque(
     maxlen=POSITION_HISTORY_SIZE
 )
-
 
 square_history = deque(
     maxlen=SQUARE_STABLE_FRAMES
@@ -147,7 +138,7 @@ square_history = deque(
 
 
 controller = GestureController()
-
+gesture_chess = GestureChess()
 
 
 print()
@@ -157,13 +148,12 @@ print("===================================")
 print()
 
 print("Управление:")
-print("  ✊ = выбрать фигуру")
-print("  ✌️ = двигать фигуру")
-print("  🖐️ = подтвердить")
-print("  ✌️ -> ✊ = отменить и выбрать другую")
-print("  Q = выход")
+print("  FIST        = выбрать фигуру")
+print("  TWO_FINGERS = двигать фигуру")
+print("  OPEN_PALM   = подтвердить")
+print("  FIST        во время движения = выбрать другую")
+print("  Q           = выход")
 print()
-
 
 
 while True:
@@ -174,12 +164,11 @@ while True:
         print("Не удалось получить кадр.")
         break
 
-  
+    # Зеркало
     frame = cv2.flip(frame, 1)
 
     height, width = frame.shape[:2]
 
-  
     rgb = cv2.cvtColor(
         frame,
         cv2.COLOR_BGR2RGB
@@ -187,8 +176,7 @@ while True:
 
     result = hands.process(rgb)
 
-
-    raw_gesture = "UNKNOWN"
+    stable_gesture = "UNKNOWN"
 
     palm_square = None
     finger_square = None
@@ -197,13 +185,14 @@ while True:
     finger_point = None
 
 
+    
     if result.multi_hand_landmarks:
 
         hand = result.multi_hand_landmarks[0]
 
         landmarks = hand.landmark
 
-
+       
         mp_draw.draw_landmarks(
             frame,
             hand,
@@ -211,16 +200,21 @@ while True:
         )
 
 
-    
+        
         raw_gesture = classify_gesture(
             landmarks
         )
 
-        stable_gesture = gesture_stabilizer.update(
+        gesture_history.append(
             raw_gesture
         )
 
+        stable_gesture = get_stable_gesture(
+            gesture_history
+        )
 
+
+       
         palm_point = get_palm_center(
             landmarks
         )
@@ -243,9 +237,12 @@ while True:
             )
 
 
-  
-        finger_point = get_index_tip(
-            landmarks
+        
+        index_tip = landmarks[8]
+
+        finger_point = (
+            index_tip.x,
+            index_tip.y
         )
 
         finger_positions.append(
@@ -266,33 +263,98 @@ while True:
             )
 
 
+       
+        if palm_point is not None:
+
+            palm_px = int(
+                palm_x * width
+            )
+
+            palm_py = int(
+                palm_y * height
+            )
+
+            cv2.circle(
+                frame,
+                (palm_px, palm_py),
+                10,
+                (255, 0, 255),
+                -1
+            )
+
+
+       
+        if finger_point is not None:
+
+            finger_px = int(
+                finger_x * width
+            )
+
+            finger_py = int(
+                finger_y * height
+            )
+
+            cv2.circle(
+                frame,
+                (finger_px, finger_py),
+                12,
+                (0, 255, 255),
+                -1
+            )
+
+
+  
     else:
+
+        gesture_history.clear()
+
+        palm_positions.clear()
+
+        finger_positions.clear()
+
+        square_history.clear()
 
         stable_gesture = "UNKNOWN"
 
 
-    controller_data = controller.update(
+  
+    committed_move = controller.update(
         stable_gesture,
-        palm_square=palm_square,
-        finger_square=finger_square
+        palm_square,
+        finger_square
     )
 
-
-    state = controller_data["state"]
-
-    selected_square = controller_data["selected"]
-
-    destination_square = controller_data["destination"]
-
-    action = controller_data["action"]
-
-    move = controller_data["move"]
+    state = controller.state
+    selected_square = controller.selected_square
+    destination_square = controller.destination_square
 
 
+  
+    if committed_move is not None:
+
+        from_square, to_square = committed_move
+
+        print()
+        print("===================================")
+        print("MOVE COMMITTED")
+        print(
+            f"{from_square} -> {to_square}"
+        )
+        print("===================================")
+        gesture_chess.make_move(
+            from_square,
+            to_square
+        )
+
+      
+        print()
+
+
+  
     cv2.rectangle(
         frame,
         (15, 15),
-        (700, 240),
+        (650, 220),
         (0, 0, 0),
         -1
     )
@@ -312,7 +374,7 @@ while True:
     cv2.putText(
         frame,
         f"State: {state}",
-        (30, 95),
+        (30, 90),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.85,
         (255, 255, 255),
@@ -326,7 +388,6 @@ while True:
         else "---"
     )
 
-
     destination_text = (
         destination_square
         if destination_square
@@ -337,7 +398,7 @@ while True:
     cv2.putText(
         frame,
         f"Selected: {selected_text}",
-        (30, 135),
+        (30, 130),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.75,
         (255, 255, 255),
@@ -348,7 +409,7 @@ while True:
     cv2.putText(
         frame,
         f"Destination: {destination_text}",
-        (30, 175),
+        (30, 165),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.75,
         (255, 255, 255),
@@ -356,39 +417,19 @@ while True:
     )
 
 
-    palm_text = (
-        palm_square
-        if palm_square
-        else "---"
-    )
-
-
-    cv2.putText(
-        frame,
-        f"Palm: {palm_text}",
-        (30, 210),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.65,
-        (200, 200, 200),
-        2
-    )
-
-
- 
-    if action:
+    if palm_square:
 
         cv2.putText(
             frame,
-            f"ACTION: {action}",
-            (30, 245),
+            f"Palm: {palm_square}",
+            (30, 200),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.7,
-            (255, 255, 255),
+            0.65,
+            (200, 200, 200),
             2
         )
 
 
- 
     cv2.putText(
         frame,
         "Q - quit",
@@ -400,8 +441,9 @@ while True:
     )
 
 
+    
     cv2.imshow(
-        "ChessSight - Position Test",
+        "ChessSight - Gesture Chess Controller",
         frame
     )
 
@@ -420,4 +462,4 @@ cv2.destroyAllWindows()
 hands.close()
 
 print()
-print("Position test остановлен.")
+print("Gesture test остановлен.")

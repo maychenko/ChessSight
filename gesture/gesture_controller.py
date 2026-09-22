@@ -1,152 +1,120 @@
 class GestureController:
+    """
+    Состояния:
 
-    IDLE = "IDLE"
-    SELECTING = "SELECTING"
-    MOVING = "MOVING"
+    IDLE
+        FIST -> выбрать клетку
+
+    SELECTING
+        FIST -> менять выбранную клетку
+        TWO_FINGERS -> начать движение
+        OPEN_PALM -> отмена
+
+    MOVING
+        TWO_FINGERS -> менять destination
+        FIST -> отменить движение и выбрать другую клетку
+        OPEN_PALM -> подтвердить ход
+    """
 
     def __init__(self):
-        self.state = self.IDLE
-
+        self.state = "IDLE"
         self.selected_square = None
         self.destination_square = None
 
+    def reset(self):
+        self.state = "IDLE"
+        self.selected_square = None
+        self.destination_square = None
 
     def update(
         self,
         gesture,
-        palm_square=None,
-        finger_square=None
+        palm_square,
+        finger_square
     ):
         """
-        Обрабатывает один стабильный жест.
+        Возвращает:
 
-        Возвращает словарь с текущим состоянием.
+            None
+                если ход ещё не подтверждён
+
+            (from_square, to_square)
+                если пользователь подтвердил ход ладонью
         """
 
-        action = None
-        move = None
+        committed_move = None
 
-    
-        if self.state == self.IDLE:
+       
+        if self.state == "IDLE":
 
-            # ✊
-            #
-            # Начинаем выбирать фигуру.
-            #
+            self.selected_square = None
+            self.destination_square = None
+
             if gesture == "FIST":
-
                 if palm_square is not None:
                     self.selected_square = palm_square
-                    self.destination_square = None
+                    self.state = "SELECTING"
 
-                    self.state = self.SELECTING
-
-                    action = "SELECT"
-
-      
-        elif self.state == self.SELECTING:
+       
+        elif self.state == "SELECTING":
 
             # ✊
-            #
-            # Пока кулак:
-            # можно двигать руку и менять выбранную клетку.
-            #
+            # Можно двигать кулак и выбирать другую клетку
             if gesture == "FIST":
 
                 if palm_square is not None:
                     self.selected_square = palm_square
 
             # ✌️
-            #
-            # Фиксируем выбранную клетку.
-            #
+            # Начинаем движение выбранной фигуры
             elif gesture == "TWO_FINGERS":
 
-                self.state = self.MOVING
+                if self.selected_square is not None:
 
-                if finger_square is not None:
                     self.destination_square = finger_square
-
-                action = "START_MOVING"
+                    self.state = "MOVING"
 
             # 🖐️
-            #
-            # Просто отменяем выбор.
-            #
+            # Отмена
             elif gesture == "OPEN_PALM":
 
                 self.reset()
 
-                action = "CANCEL"
-
         
-        elif self.state == self.MOVING:
+        elif self.state == "MOVING":
 
             # ✌️
-            #
-            # Двигаем destination.
-            #
+            # Двигаем destination
             if gesture == "TWO_FINGERS":
 
                 if finger_square is not None:
                     self.destination_square = finger_square
 
             # ✊
-            #
-            # Отменяем текущее движение.
-            # Теперь кулак снова выбирает новую клетку.
-            #
+            # Отмена движения + выбор другой фигуры
             elif gesture == "FIST":
-
-                self.state = self.SELECTING
 
                 self.destination_square = None
 
                 if palm_square is not None:
                     self.selected_square = palm_square
-
-                action = "RESELECT"
+                    self.state = "SELECTING"
+                else:
+                    self.state = "SELECTING"
 
             # 🖐️
-            #
-            # Подтверждаем ход.
-            #
+            # Подтверждаем
             elif gesture == "OPEN_PALM":
 
                 if (
                     self.selected_square is not None
                     and self.destination_square is not None
                 ):
-                    move = (
+                    committed_move = (
                         self.selected_square,
                         self.destination_square
                     )
 
-                    action = "COMMIT"
-
                 self.reset()
 
-        return {
-            "state": self.state,
-            "selected": self.selected_square,
-            "destination": self.destination_square,
-            "action": action,
-            "move": move
-        }
-
-  
-    def reset(self):
-
-        self.state = self.IDLE
-
-        self.selected_square = None
-        self.destination_square = None
-
-  
-    def get_state(self):
-
-        return {
-            "state": self.state,
-            "selected": self.selected_square,
-            "destination": self.destination_square
-        }
+        return committed_move
