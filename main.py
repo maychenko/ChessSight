@@ -1,133 +1,376 @@
-"""
-main.py
-Голос -> проверка хода -> мышь.
-CV ход противника подключается только в обычном режиме.
-"""
-
 import argparse
 import time
+
+import cv2
 import chess
 
 from capture import grab_board, load_region
+
 from board_reader import (
     load_templates,
     changed_squares,
     infer_move_from_diff,
     STABLE_MOVE_FRAMES,
 )
-from voice_commands import listen_once, parse_text_to_move
+
+from voice_commands import parse_text_to_move
 from move_executor import execute_move
+
+from voice_router import (
+    VoiceRouter,
+    detect_mode_command,
+)
+
+from gesture.camera import Camera
+from gesture.hand_tracker import HandTracker
+from gesture.gesture_classifier import classify_gesture
+from gesture.board_mapper import BoardMapper
+from gesture.gesture_controller import GestureController
+from gesture.overlay import HolographicBoard
+from gesture.holographic_overlay import HolographicOverlay
 
 
 def move_name(move):
-    return f"{chess.square_name(move.from_square)}-{chess.square_name(move.to_square)}"
+    return (
+        f"{chess.square_name(move.from_square)}"
+        f"-"
+        f"{chess.square_name(move.to_square)}"
+    )
 
 
-def wait_for_opponent_move(board, region, orientation, poll_interval=0.45, timeout=300):
-    """
-    Ждём ход противника.
+class GestureRuntime:
+    def __init__(self, board_region, holographic_overlay):
+        self.camera = Camera()
+        self.tracker = HandTracker()
 
-    Сравниваем каждый новый кадр с одним и тем же кадром ДО хода.
-    Поэтому после окончания анимации изменение остаётся видимым.
-    """
+        self.mapper = BoardMapper(
+            left=430,
+            top=170,
+            right=850,
+            bottom=590
+        )
 
-    prev_img = grab_board(region)
-    start = time.time()
+        self.controller = GestureController()
+        self.debug_board = HolographicBoard()
 
-    last_candidate = None
-    stable_count = 0
+        
+        self.holographic_overlay = holographic_overlay
 
-    print("[CV] Слежу за доской...")
+        self.gesture_history = []
+        self.history_size = 5
 
-    while time.time() - start < timeout:
-        time.sleep(poll_interval)
+    def reset(self):
+        self.controller.reset()
+        self.gesture_history.clear()
 
-        curr_img = grab_board(region)
+        if self.holographic_overlay:
+            self.holographic_overlay.clear()
+
+    def close(self):
+    
+        self.camera.release()
+        self.tracker.close()
+
+    def stable_gesture(self, gesture):
+        self.gesture_history.append(gesture)
+
+        if len(self.gesture_history) > self.history_size:
+            self.gesture_history.pop(0)
+
+        if not self.gesture_history:
+            return "UNKNOWN"
+
+        counts = {}
+
+        for item in self.gesture_history:
+            counts[item] = counts.get(item, 0) + 1
+
+        return max(
+            self.gesture_history,
+            key=self.gesture_history.count
+        )
+
+    def update(self):
+        frame = self.camera.read()
+
+        if frame is None:
+            return None, None
+
+        landmarks = self.tracker.process(frame)
+
+        gesture = "UNKNOWN"
+        stable_gesture = "UNKNOWN"
+
+        palm_square = None
+        finger_square = None
+
+        palm_point = None
+        finger_point = None
+
+        committed_move = None
+
+        if landmarks is not None:
+
+            self.tracker.draw(frame, landmarks)
+
+            gesture = classify_gesture(landmarks)
+
+            stable_gesture = self.stable_gesture(gesture)
+
+            
+
+            palm = self.tracker.get_palm_position(landmarks)
+
+            if palm is not None:
+                h, w = frame.shape[:2]
+
+                palm_point = (
+                    int(palm[0] * w),
+                    int(palm[1] * h)
+                )
+
+                palm_square = self.mapper.point_to_square(
+                    palm_point
+                )
+
+            
+
+            finger = self.tracker.get_finger_position(landmarks)
+
+            if finger is not None:
+                h, w = frame.shape[:2]
+
+                finger_point = (
+                    int(finger[0] * w),
+                    int(finger[1] * h)
+                )
+
+                finger_square = self.mapper.point_to_square(
+                    finger_point
+                )
+
+           
+
+            committed_move = self.controller.update(
+                stable_gesture,
+                palm_square,
+                finger_square
+            )
+
+        else:
+            self.gesture_history.clear()
+
+       
+
+        cv2.rectangle(
+            frame,
+            (10, 10),
+            (640, 220),
+            (0, 0, 0),
+            -1
+        )
+
+        cv2.putText(
+            frame,
+            f"GESTURE: {gesture}",
+            (25, 45),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            (255, 255, 255),
+            2
+        )
+
+        cv2.putText(
+            frame,
+            f"STABLE: {stable_gesture}",
+            (25, 75),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (255, 255, 255, 255),
+            2
+        )
+
+        cv2.putText(
+            frame,
+            f"STATE: {self.controller.state}",
+            (25, 110),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (255, 255, 255),
+            2
+        )
+
+        cv2.putText(
+            frame,
+            f"PALM: {palm_square or '---'}",
+            (25, 145),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (255, 255, 255),
+            2
+        )
+
+        cv2.putText(
+            frame,
+            f"FINGER: {finger_square or '---'}",
+            (25, 180),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (255, 255, 255),
+            2
+        )
+
+        cv2.putText(
+            frame,
+            "MODE: GESTURE",
+            (25, 215),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (100, 255, 255),
+            2
+        )
+
+        frame = self.debug_board.draw(
+            frame,
+            self.controller,
+            palm_point
+        )
+
+    
+
+        current_square = None
+
+        if stable_gesture == "FIST":
+            current_square = palm_square
+
+        elif stable_gesture == "TWO_FINGERS":
+            current_square = finger_square
+
+        else:
+            current_square = finger_square or palm_square
+
+        if self.holographic_overlay:
+            self.holographic_overlay.draw(
+                selected_square=self.controller.selected_square,
+                destination_square=self.controller.destination_square,
+                current_square=current_square,
+                gesture=stable_gesture,
+                show_grid=False
+            )
+
+        return frame, committed_move
+
+
+class OpponentMoveDetector:
+
+    def __init__(
+        self,
+        region,
+        orientation,
+        poll_interval=0.45
+    ):
+        self.region = region
+        self.orientation = orientation
+        self.poll_interval = poll_interval
+
+        self.active = False
+        self.base_img = None
+
+        self.last_poll = 0.0
+        self.last_candidate = None
+        self.stable_count = 0
+
+    def start(self):
+
+        if self.active:
+            return
+
+        self.base_img = grab_board(self.region)
+
+        self.last_poll = 0.0
+        self.last_candidate = None
+        self.stable_count = 0
+
+        self.active = True
+
+        print("[CV] Слежу за доской...")
+
+    def stop(self):
+
+        self.active = False
+
+        self.base_img = None
+        self.last_candidate = None
+        self.stable_count = 0
+
+    def update(self, board):
+
+        if not self.active:
+            return None
+
+        if self.base_img is None:
+            self.start()
+            return None
+
+        now = time.monotonic()
+
+        if now - self.last_poll < self.poll_interval:
+            return None
+
+        self.last_poll = now
+
+        curr_img = grab_board(self.region)
 
         diff = changed_squares(
-            prev_img,
+            self.base_img,
             curr_img,
-            orientation,
-            debug=True
+            self.orientation,
+            debug=False
         )
 
         if diff:
+
             move = infer_move_from_diff(
                 board,
                 diff,
-                debug=True
+                debug=False
             )
 
             if move is not None:
 
-                if move == last_candidate:
-                    stable_count += 1
+                if move == self.last_candidate:
+                    self.stable_count += 1
+
                 else:
-                    last_candidate = move
-                    stable_count = 1
+                    self.last_candidate = move
+                    self.stable_count = 1
 
                 print(
                     f"[CV] Кандидат: {move_name(move)} "
-                    f"({stable_count}/{STABLE_MOVE_FRAMES})"
+                    f"({self.stable_count}/{STABLE_MOVE_FRAMES})"
                 )
 
-                if stable_count >= STABLE_MOVE_FRAMES:
+                if self.stable_count >= STABLE_MOVE_FRAMES:
+
+                    self.stop()
+
                     return move
 
             else:
-                last_candidate = None
-                stable_count = 0
+                self.last_candidate = None
+                self.stable_count = 0
 
-        else:
-           pass
-
-    return None
-
-
-def human_turn(board):
-    while True:
-        text = listen_once()
-
-        if not text:
-            continue
-
-        print(f"[голос] Услышал: {text}")
-
-        move, error = parse_text_to_move(text, board)
-
-        if move is None:
-            print(f"[ошибка] {error}")
-            continue
-
-        print(f"[голос] Ход принят: {move_name(move)}")
-        return move
-
-
-def print_position(board):
-    print("[позиция]")
-    print(board)
-    print(f"[позиция] FEN: {board.fen()}")
+        return None
 
 
 def main():
+
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
         "--side",
         choices=["white", "black"],
         default="white"
-    )
-
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="слушать голос и проверять ход, но не двигать мышь"
-    )
-
-    parser.add_argument(
-        "--one-move",
-        action="store_true",
-        help="сделать один реальный ход мышью и завершить программу"
     )
 
     args = parser.parse_args()
@@ -144,135 +387,259 @@ def main():
         else chess.BLACK
     )
 
-    print("Партия началась.")
-    print("Ориентация доски:", orientation)
-    print(
-        "Моя сторона:",
-        "белые" if my_color == chess.WHITE else "чёрные"
-    )
 
-    if args.dry_run:
-        print("Режим: DRY-RUN (без кликов)")
+    region = load_region()
 
-    if args.one_move:
-        print("Режим: ONE-MOVE (один реальный ход)")
-
-
-    if args.dry_run:
-        region = None
-    else:
-        region = load_region()
-        load_templates()
+    load_templates()
 
     board = chess.Board()
 
-    print_position(board)
+    mode_state = {
+        "mode": "VOICE"
+    }
 
-    
-    if my_color == chess.BLACK and not args.dry_run:
+    voice_router = VoiceRouter()
+    voice_router.start()
 
-        print("\nЖду первый ход противника...")
+    holographic_overlay = HolographicOverlay(region)
 
-        move = wait_for_opponent_move(
-            board,
-            region,
-            orientation
-        )
+    gesture_runtime = None
 
-        if move is None:
-            print(
-                "[ошибка] Не удалось распознать "
-                "первый ход противника."
-            )
-            return
+    opponent_detector = OpponentMoveDetector(
+        region,
+        orientation
+    )
 
-        board.push(move)
+    print()
+    print("======================================")
+    print("          ChessSight")
+    print("======================================")
+    print()
+    print("MODE: VOICE")
+    print()
+    print("Голосовые переключатели:")
+    print("  'режим жестов'")
+    print("  'голосовой режим'")
+    print()
+    print("Q в окне камеры = выход")
+    print()
 
-        print(
-            f"[игра] Противник сыграл: "
-            f"{move_name(move)}"
-        )
+    try:
 
-        print_position(board)
+        while not board.is_game_over():
 
-    while not board.is_game_over():
+           
+            while True:
 
-     
-        if board.turn == my_color:
+                text = voice_router.get()
 
-            print("\nТвой ход.")
+                if text is None:
+                    break
 
-            move = human_turn(board)
+                command = detect_mode_command(text)
 
-            # DRY RUN
-            if args.dry_run:
+               
+                if command:
 
-                board.push(move)
+                    if command != mode_state["mode"]:
 
-                print("[dry-run] Мышь не двигаю.")
+                        mode_state["mode"] = command
 
-                print_position(board)
+                        print()
+                        print(
+                            f"[MODE] Переключение -> {command}"
+                        )
+                        print()
+
+                        if command == "GESTURE":
+
+                            
+                            if gesture_runtime is None:
+
+                                gesture_runtime = GestureRuntime(
+                                    region,
+                                    holographic_overlay
+                                )
+
+                            gesture_runtime.reset()
+
+                            
+                            if hasattr(
+                                holographic_overlay,
+                                "show"
+                            ):
+                                holographic_overlay.show()
+
+                        else:
+
+                        
+
+                            if gesture_runtime is not None:
+                                gesture_runtime.reset()
+
+                            if hasattr(
+                                holographic_overlay,
+                                "hide"
+                            ):
+                                holographic_overlay.hide()
+
+                            else:
+                                holographic_overlay.clear()
+
+                    continue
 
                 
-                return
+                if (
+                    mode_state["mode"] == "VOICE"
+                    and board.turn == my_color
+                ):
 
-            execute_move(
-                move,
-                region,
-                orientation
-            )
+                    move, error = parse_text_to_move(
+                        text,
+                        board
+                    )
 
-            board.push(move)
+                    if move is None:
 
-            print(
-                f"[игра] Сыграно: "
-                f"{move_name(move)}"
-            )
+                        print(
+                            f"[ошибка] {error}"
+                        )
 
-            print_position(board)
+                    else:
 
-        
-            if args.one_move:
+                        execute_move(
+                            move,
+                            region,
+                            orientation
+                        )
 
-                print("[one-move] Готово.")
+                        board.push(move)
 
-                return
+                        print(
+                            f"[игра] Сыграно: "
+                            f"{move_name(move)}"
+                        )
 
-            time.sleep(0.5)
+                        time.sleep(0.35)
 
-    
-        else:
+           
+            if mode_state["mode"] == "GESTURE":
 
-            print("\nЖду ход противника...")
+                if gesture_runtime is None:
 
-            move = wait_for_opponent_move(
-                board,
-                region,
-                orientation
-            )
+                    gesture_runtime = GestureRuntime(
+                        region,
+                        holographic_overlay
+                    )
 
-            if move is None:
-
-                print(
-                    "[внимание] "
-                    "Ход противника не распознан."
+                frame, committed_move = (
+                    gesture_runtime.update()
                 )
 
-                continue
+                if frame is not None:
 
-            board.push(move)
+                    cv2.imshow(
+                        "ChessSight - Gesture Mode",
+                        frame
+                    )
 
-            print(
-                f"[игра] Противник сыграл: "
-                f"{move_name(move)}"
-            )
+                
+                if committed_move:
 
-            print_position(board)
+                    from_square, to_square = committed_move
 
-    print(
-        "Игра окончена:",
-        board.result()
-    )
+                    try:
+
+                        move = chess.Move.from_uci(
+                            from_square + to_square
+                        )
+
+                    except ValueError:
+
+                        move = None
+
+                    if move is None:
+
+                        print(
+                            "[GESTURE] Некорректный ход"
+                        )
+
+                    elif board.turn != my_color:
+
+                        print(
+                            "[GESTURE] Сейчас ход противника"
+                        )
+
+                    elif move not in board.legal_moves:
+
+                        print(
+                            f"[GESTURE] Illegal move: "
+                            f"{from_square} -> {to_square}"
+                        )
+
+                    else:
+
+                        execute_move(
+                            move,
+                            region,
+                            orientation
+                        )
+
+                        board.push(move)
+
+                        print(
+                            f"[GESTURE] Сыграно: "
+                            f"{move_name(move)}"
+                        )
+
+                        time.sleep(0.35)
+
+                key = cv2.waitKey(1) & 0xFF
+
+                if key == ord("q"):
+                    break
+
+           
+            if board.turn != my_color:
+
+                opponent_detector.start()
+
+                move = opponent_detector.update(
+                    board
+                )
+
+                if move is not None:
+
+                    board.push(move)
+
+                    print(
+                        f"[игра] Противник сыграл: "
+                        f"{move_name(move)}"
+                    )
+
+            else:
+
+                opponent_detector.stop()
+
+            time.sleep(0.01)
+
+    finally:
+
+        opponent_detector.stop()
+
+        voice_router.stop()
+
+        if gesture_runtime is not None:
+            gesture_runtime.close()
+
+        
+        if holographic_overlay is not None:
+            holographic_overlay.close()
+
+        cv2.destroyAllWindows()
+
+    print()
+    print("ChessSight остановлен.")
 
 
 if __name__ == "__main__":

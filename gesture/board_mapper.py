@@ -1,4 +1,8 @@
 class BoardMapper:
+    """
+    Переводит положение руки из рабочей зоны камеры
+    в шахматные клетки.
+    """
 
     def __init__(
         self,
@@ -13,7 +17,6 @@ class BoardMapper:
         self.bottom = bottom
 
     def point_to_square(self, point):
-
         if point is None:
             return None
 
@@ -40,8 +43,6 @@ class BoardMapper:
         files = "abcdefgh"
 
         file = files[col]
-
-        
         rank = 8 - row
 
         return f"{file}{rank}"

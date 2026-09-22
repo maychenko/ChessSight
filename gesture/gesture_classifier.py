@@ -2,7 +2,6 @@ import math
 from collections import Counter, deque
 
 
-
 def angle(a, b, c):
     """
     Угол ABC в градусах.
@@ -42,17 +41,29 @@ def angle(a, b, c):
         return 0
 
     cos_value = dot / (len_ab * len_cb)
-    cos_value = max(-1.0, min(1.0, cos_value))
 
-    return math.degrees(math.acos(cos_value))
+    cos_value = max(
+        -1.0,
+        min(1.0, cos_value)
+    )
+
+    return math.degrees(
+        math.acos(cos_value)
+    )
 
 
-
-def finger_extended(landmarks, mcp, pip, dip, tip):
+def finger_extended(
+    landmarks,
+    mcp,
+    pip,
+    dip,
+    tip
+):
     """
-    Проверяем, выпрямлен ли палец.
+    Проверяем, выпрямлён ли палец.
 
-    Используем два угла, чтобы классификация была стабильнее.
+    landmarks здесь уже обычный список
+    MediaPipe landmarks.
     """
 
     angle_1 = angle(
@@ -67,8 +78,10 @@ def finger_extended(landmarks, mcp, pip, dip, tip):
         landmarks[tip]
     )
 
-    return angle_1 > 150 and angle_2 > 150
-
+    return (
+        angle_1 > 150
+        and angle_2 > 150
+    )
 
 
 def classify_gesture(landmarks):
@@ -81,20 +94,27 @@ def classify_gesture(landmarks):
         UNKNOWN
     """
 
+    
+    points = landmarks.landmark
+
     index = finger_extended(
-        landmarks, 5, 6, 7, 8
+        points,
+        5, 6, 7, 8
     )
 
     middle = finger_extended(
-        landmarks, 9, 10, 11, 12
+        points,
+        9, 10, 11, 12
     )
 
     ring = finger_extended(
-        landmarks, 13, 14, 15, 16
+        points,
+        13, 14, 15, 16
     )
 
     pinky = finger_extended(
-        landmarks, 17, 18, 19, 20
+        points,
+        17, 18, 19, 20
     )
 
     fingers = [
@@ -104,11 +124,17 @@ def classify_gesture(landmarks):
         pinky
     ]
 
-    # ✊
+    # --------------------------------------------------------
+    # ✊ FIST
+    # --------------------------------------------------------
+
     if not any(fingers):
         return "FIST"
 
-    # ✌️
+    # --------------------------------------------------------
+    # ✌️ TWO FINGERS
+    # --------------------------------------------------------
+
     if (
         index
         and middle
@@ -117,27 +143,46 @@ def classify_gesture(landmarks):
     ):
         return "TWO_FINGERS"
 
-    # 🖐️
+    # --------------------------------------------------------
+    # 🖐️ OPEN PALM
+    # --------------------------------------------------------
+
     if all(fingers):
         return "OPEN_PALM"
 
     return "UNKNOWN"
 
+
 class GestureStabilizer:
 
-    def __init__(self, size=5, required=3):
-        self.history = deque(maxlen=size)
+    def __init__(
+        self,
+        size=5,
+        required=3
+    ):
+
+        self.history = deque(
+            maxlen=size
+        )
+
         self.required = required
 
     def update(self, gesture):
-        self.history.append(gesture)
+
+        self.history.append(
+            gesture
+        )
 
         if not self.history:
             return "UNKNOWN"
 
-        counts = Counter(self.history)
+        counts = Counter(
+            self.history
+        )
 
-        stable_gesture, count = counts.most_common(1)[0]
+        stable_gesture, count = (
+            counts.most_common(1)[0]
+        )
 
         if count >= self.required:
             return stable_gesture
@@ -145,4 +190,5 @@ class GestureStabilizer:
         return "UNKNOWN"
 
     def reset(self):
+
         self.history.clear()

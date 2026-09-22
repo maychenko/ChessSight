@@ -48,8 +48,7 @@ def execute_move(move: chess.Move, region: dict, orientation="white_bottom"):
 
     pyautogui.moveTo(x1, y1, duration=0.15)
     pyautogui.mouseDown()
-    # Промежуточная точка помогает сайту распознать это как drag,
-    # а не как мгновенный "телепорт", который некоторые движки игнорируют.
+    
     mid_x, mid_y = (x1 + x2) // 2, (y1 + y2) // 2
     pyautogui.moveTo(mid_x, mid_y, duration=0.1)
     pyautogui.moveTo(x2, y2, duration=0.15)
@@ -57,9 +56,5 @@ def execute_move(move: chess.Move, region: dict, orientation="white_bottom"):
     pyautogui.mouseUp()
 
     if move.promotion == chess.QUEEN:
-        # После дропа пешки на последнюю линию chess24 показывает выбор
-        # фигуры превращения. Клик по клетке-приземления часто выбирает
-        # даму по умолчанию (первая иконка) - TODO: откалибровать точнее
-        # под конкретную тему сайта, если авто-выбор промахивается.
         time.sleep(0.3)
         pyautogui.click(x2, y2)

@@ -46,15 +46,11 @@ SQUARE_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Полностью склеенные варианты от Google:
-# B2B4, C7C5
+
 COMPACT_TWO_SQUARES_RE = re.compile(
     r"^([a-h])([1-8])([a-h])([1-8])$", re.IGNORECASE
 )
 
-# Google может потерять вторую букву:
-# B224 -> B2 B4
-# C75  -> C7 C5
 COMPACT_SAME_FILE_RE = re.compile(
     r"^([a-h])([1-8])([1-8])$|^([a-h])([1-8])([1-8])([0-9]+)$",
     re.IGNORECASE,
@@ -89,14 +85,12 @@ def normalize_speech_text(text: str) -> str:
     text = _replace_number_words(text)
     text = _replace_file_words(text)
 
-    # Google иногда слышит B как V/В. Исправляем только перед цифрой.
     text = re.sub(r"(?<![a-zа-я])v(?=\s*[1-8]\b)", "b", text)
     text = re.sub(r"(?<![a-zа-я])в(?=\s*[1-8]\b)", "b", text)
 
-    # Google может вернуть кириллическую С вместо латинской C.
     text = re.sub(r"(?<![a-zа-я])с(?=\s*[1-8]\b)", "c", text)
 
-    # Полностью склеенные клетки: B2B4 -> B2 B4.
+    
     text = re.sub(
         r"(?<![a-h0-9])([a-h][1-8])([a-h][1-8])(?![a-h0-9])",
         r"\1 \2",
@@ -174,7 +168,7 @@ def _legal_move(board: chess.Board, from_sq: str, to_sq: str, promotion=None):
     if move in board.legal_moves:
         return move
 
-    # Если пешка превращается и фигура не названа — ферзь по умолчанию.
+    
     auto_promo = chess.Move(from_square, to_square, promotion=chess.QUEEN)
     if auto_promo in board.legal_moves:
         return auto_promo
@@ -188,7 +182,7 @@ def parse_text_to_move(text: str, board: chess.Board):
     normalized = normalize_speech_text(text)
     print(f"[голос] Нормализация: '{original}' -> '{normalized}'")
 
-    # Рокировка.
+  
     if "рокировк" in normalized:
         want_short = "коротк" in normalized
         want_long = "длин" in normalized
@@ -212,7 +206,7 @@ def parse_text_to_move(text: str, board: chess.Board):
 
     promotion = _promotion_from_text(normalized)
 
-    # Сначала нормальный вариант: B2 B4 / e2 e4 / C7 C5.
+
     squares = _extract_squares(normalized)
 
     if len(squares) == 2:
@@ -232,7 +226,7 @@ def parse_text_to_move(text: str, board: chess.Board):
     if len(squares) > 2:
         return None, f"Нашёл слишком много клеток: {' '.join(squares)}. Повтори только один ход."
 
-    # Если обычный regex не нашёл две клетки, пробуем склеенный результат Google.
+   
     compact_candidates = _compact_square_candidates(normalized)
     legal_candidates = []
 
@@ -265,8 +259,6 @@ def listen_once(recognizer=None, mic=None, language="ru-RU", timeout=6):
     mic = mic or sr.Microphone()
 
     with mic as source:
-        # Оставляем небольшую автонастройку, чтобы новый запуск нормально
-        # работал в другой комнате/при другом шуме.
         recognizer.adjust_for_ambient_noise(source, duration=0.25)
         print("[голос] Слушаю...")
         try:

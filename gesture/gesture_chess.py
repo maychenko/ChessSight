@@ -11,42 +11,65 @@ class GestureChess:
         board_region_path="board_region.json",
         orientation="white_bottom"
     ):
+
         self.board = chess.Board()
         self.orientation = orientation
 
-        with open(board_region_path, "r", encoding="utf-8") as f:
+        with open(
+            board_region_path,
+            "r",
+            encoding="utf-8"
+        ) as f:
+
             self.region = json.load(f)
 
-        print("[GESTURE CHESS] Board initialized")
-        print("[GESTURE CHESS] Board region loaded")
+        print(
+            "[GESTURE CHESS] Board initialized"
+        )
 
-    def make_move(self, from_square, to_square):
+        print(
+            "[GESTURE CHESS] "
+            "Board region loaded"
+        )
 
-        uci = f"{from_square}{to_square}"
+    def make_move(
+        self,
+        from_square,
+        to_square
+    ):
+
+        uci = (
+            f"{from_square}"
+            f"{to_square}"
+        )
 
         try:
-            move = chess.Move.from_uci(uci)
-        except ValueError:
-            print(
-                f"[GESTURE CHESS] Invalid move: "
-                f"{from_square} -> {to_square}"
+
+            move = chess.Move.from_uci(
+                uci
             )
+
+        except ValueError:
+
+            print(
+                f"[GESTURE CHESS] "
+                f"Invalid move: "
+                f"{from_square} -> "
+                f"{to_square}"
+            )
+
             return False
 
         if move not in self.board.legal_moves:
 
             print(
-                f"[GESTURE CHESS] Illegal move: "
-                f"{from_square} -> {to_square}"
+                f"[GESTURE CHESS] "
+                f"Illegal move: "
+                f"{from_square} -> "
+                f"{to_square}"
             )
 
             return False
-
-        print()
-        print("==============================")
-        print("GESTURE MOVE")
-        print(f"{from_square} -> {to_square}")
-        print("==============================")
 
         execute_move(
             move,
@@ -54,10 +77,13 @@ class GestureChess:
             self.orientation
         )
 
-   
         self.board.push(move)
 
-        print("[GESTURE CHESS] Move executed")
-        print()
+        print(
+            f"[GESTURE CHESS] "
+            f"Move executed: "
+            f"{from_square} -> "
+            f"{to_square}"
+        )
 
         return True

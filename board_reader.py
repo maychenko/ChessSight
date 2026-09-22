@@ -26,13 +26,13 @@ from boardgrid import split_into_cells
 
 TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "templates")
 
-# Порог для edge-based detector. Его лучше смотреть по debug-выводу.
+
 EDGE_DIFF_THRESHOLD = 4.0
 
-# Допустимое количество "лишних" клеток вокруг настоящего хода.
+
 MAX_EXTRA_CHANGED = 4
 
-# Сколько последовательных кадров должны подтверждать один и тот же ход.
+
 STABLE_MOVE_FRAMES = 2
 
 
@@ -81,11 +81,11 @@ def _edge_map(cell):
     cell = _crop_cell(cell)
     gray = cv2.cvtColor(cell, cv2.COLOR_BGR2GRAY)
 
-    # Лёгкое сглаживание убирает шум от антиалиасинга/скриншота.
+   
     gray = cv2.GaussianBlur(gray, (3, 3), 0)
     edges = cv2.Canny(gray, 45, 130)
 
-    # Немного закрываем разрывы контуров фигур.
+   
     kernel = np.ones((2, 2), np.uint8)
     edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
     return edges
@@ -99,7 +99,7 @@ def cell_edge_diff_score(cell_a, cell_b):
     a = _edge_map(cell_a)
     b = _edge_map(cell_b)
 
-    # Доля пикселей, у которых контур изменился.
+    
     return float(np.mean(cv2.absdiff(a, b)) / 255.0 * 100.0)
 
 
@@ -200,7 +200,7 @@ def infer_move_candidates(board: chess.Board, changed):
     for move in board.legal_moves:
         touched = squares_touched_by_move(board, move)
 
-        # Все реальные клетки хода должны присутствовать среди изменений.
+       
         if not touched.issubset(changed):
             continue
 
@@ -208,7 +208,7 @@ def infer_move_candidates(board: chess.Board, changed):
         if extra <= MAX_EXTRA_CHANGED:
             candidates.append((move, extra))
 
-    # Сначала минимальное число лишних клеток.
+  
     candidates.sort(key=lambda item: item[1])
     return candidates
 
@@ -231,7 +231,7 @@ def infer_move_from_diff(board: chess.Board, changed, debug=True):
         )
         print(f"[CV] Кандидаты: {preview}")
 
-    # Если несколько ходов одинаково хорошо подходят, не гадаем.
+    
     if len(best) != 1:
         if debug:
             print("[CV] Неоднозначно — жду следующий стабильный кадр.")
