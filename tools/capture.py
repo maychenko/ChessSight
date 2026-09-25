@@ -3,18 +3,18 @@ capture.py
 
 Captures the screen and calibrates the chessboard position.
 
-The board region is stored in board_region.json and is used by
+The board region is stored in config/board_region.json and is used by
 the rest of ChessSight for screen capture, move execution and
 opponent move detection.
 
 Calibration:
 
-    python capture.py --calibrate
+    python -m tools.capture --calibrate
 
 Click the top-left corner of the chessboard first (a8), then the
 bottom-right corner (h1).
 
-The selected region is saved to board_region.json.
+The selected region is saved to config/board_region.json.
 """
 
 import argparse
@@ -26,8 +26,13 @@ import mss
 import numpy as np
 
 
+PROJECT_ROOT = os.path.dirname(
+    os.path.dirname(__file__)
+)
+
 REGION_FILE = os.path.join(
-    os.path.dirname(__file__),
+    PROJECT_ROOT,
+    "config",
     "board_region.json"
 )
 
@@ -60,20 +65,28 @@ def grab_board(region):
 
 
 def load_region():
-    """Load the calibrated chessboard region from board_region.json."""
+    """Load the calibrated chessboard region from config/board_region.json."""
 
     if not os.path.exists(REGION_FILE):
         raise FileNotFoundError(
             "Доска не откалибрована. "
-            "Запусти: python capture.py --calibrate"
+            "Запусти: python -m tools.capture --calibrate"
         )
 
-    with open(REGION_FILE, encoding="utf-8") as f:
+    with open(
+        REGION_FILE,
+        encoding="utf-8"
+    ) as f:
         return json.load(f)
 
 
 def save_region(region):
-    """Save the calibrated chessboard region to board_region.json."""
+    """Save the calibrated chessboard region to config/board_region.json."""
+
+    os.makedirs(
+        os.path.dirname(REGION_FILE),
+        exist_ok=True
+    )
 
     with open(
         REGION_FILE,
@@ -212,5 +225,6 @@ if __name__ == "__main__":
         calibrate()
     else:
         print(
-            "Используй: python capture.py --calibrate"
+            "Используй: "
+            "python -m tools.capture --calibrate"
         )

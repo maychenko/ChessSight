@@ -28,8 +28,14 @@ import chess
 from chesssight.board.boardgrid import split_into_cells
 
 
+PROJECT_ROOT = os.path.dirname(
+    os.path.dirname(
+        os.path.dirname(__file__)
+    )
+)
+
 TEMPLATES_DIR = os.path.join(
-    os.path.dirname(__file__),
+    PROJECT_ROOT,
     "templates"
 )
 
