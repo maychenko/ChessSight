@@ -6,11 +6,11 @@ square from a calibrated board in the starting position.
 
 Usage:
 
-1. Open a chess24 game in the starting position.
-2. Make sure board_region.json has already been created:
-       python capture.py --calibrate
+1. Open a chess game in the starting position.
+2. Make sure board_region.json has already been created.
 3. Run:
-       python generate_templates.py
+
+       python -m tools.generate_templates
 
 The script captures all 64 board cells and saves one example for each
 known piece type and for an empty square.
@@ -36,14 +36,19 @@ FEN notation.
 """
 
 import os
+
 import cv2
 
 from tools.capture import grab_board, load_region
 from chesssight.board.boardgrid import split_into_cells
 
 
+PROJECT_ROOT = os.path.dirname(
+    os.path.dirname(__file__)
+)
+
 TEMPLATES_DIR = os.path.join(
-    os.path.dirname(__file__),
+    PROJECT_ROOT,
     "templates"
 )
 
