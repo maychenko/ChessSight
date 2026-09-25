@@ -1,15 +1,30 @@
+"""
+hand_test.py
+
+Standalone hand-gesture recognition test.
+
+The script uses MediaPipe Hands to detect one hand and classifies
+the following gestures:
+
+- FIST
+- TWO_FINGERS
+- OPEN_PALM
+- UNKNOWN
+
+Gesture recognition is stabilized over several frames to reduce
+short recognition flickering.
+"""
+
 import cv2
 import mediapipe as mp
 import math
 from collections import deque, Counter
 
 
-
 CAMERA_INDEX = 0
 MAX_HANDS = 1
 
 STABLE_FRAMES = 5
-
 
 
 mp_hands = mp.solutions.hands
@@ -23,19 +38,19 @@ hands = mp_hands.Hands(
 )
 
 
-
 def distance(a, b):
+    """Return the 3D distance between two MediaPipe landmarks."""
+
     return math.sqrt(
-        (a.x - b.x) ** 2 +
-        (a.y - b.y) ** 2 +
-        (a.z - b.z) ** 2
+        (a.x - b.x) ** 2
+        + (a.y - b.y) ** 2
+        + (a.z - b.z) ** 2
     )
 
 
 def angle(a, b, c):
-    """
-    Угол ABC.
-    """
+    """Return the angle ABC in degrees."""
+
     ab = (
         a.x - b.x,
         a.y - b.y,
@@ -55,15 +70,15 @@ def angle(a, b, c):
     )
 
     len_ab = math.sqrt(
-        ab[0] ** 2 +
-        ab[1] ** 2 +
-        ab[2] ** 2
+        ab[0] ** 2
+        + ab[1] ** 2
+        + ab[2] ** 2
     )
 
     len_cb = math.sqrt(
-        cb[0] ** 2 +
-        cb[1] ** 2 +
-        cb[2] ** 2
+        cb[0] ** 2
+        + cb[1] ** 2
+        + cb[2] ** 2
     )
 
     if len_ab == 0 or len_cb == 0:
@@ -71,16 +86,14 @@ def angle(a, b, c):
 
     cos_value = dot / (len_ab * len_cb)
 
-    
     cos_value = max(-1.0, min(1.0, cos_value))
 
     return math.degrees(math.acos(cos_value))
 
 
 def finger_extended(landmarks, mcp, pip, dip, tip):
-    """
-    Определяем, выпрямлен ли палец.
-    """
+    """Return whether a finger is considered extended."""
+
     a = landmarks[mcp]
     b = landmarks[pip]
     c = landmarks[dip]
@@ -94,7 +107,9 @@ def finger_extended(landmarks, mcp, pip, dip, tip):
 
 def classify_gesture(landmarks):
     """
-    Возвращает:
+    Classify the current hand gesture.
+
+    Returns:
         FIST
         TWO_FINGERS
         OPEN_PALM
@@ -123,19 +138,12 @@ def classify_gesture(landmarks):
 
     fingers = [index, middle, ring, pinky]
 
-    # ✊
-    # Все четыре основных пальца согнуты
     if not any(fingers):
         return "FIST"
 
-    # ✌️
-    # Указательный + средний вытянуты
-    # Безымянный + мизинец согнуты
     if index and middle and not ring and not pinky:
         return "TWO_FINGERS"
 
-    # 🖐️
-    # Все четыре пальца вытянуты
     if all(fingers):
         return "OPEN_PALM"
 
@@ -143,10 +151,7 @@ def classify_gesture(landmarks):
 
 
 def stable_gesture(history):
-    """
-    Берём наиболее частый жест
-    из последних кадров.
-    """
+    """Return the most frequent gesture from the recent frames."""
 
     if not history:
         return "UNKNOWN"
@@ -160,8 +165,10 @@ def stable_gesture(history):
     return "UNKNOWN"
 
 
-
-cap = cv2.VideoCapture(CAMERA_INDEX, cv2.CAP_DSHOW)
+cap = cv2.VideoCapture(
+    CAMERA_INDEX,
+    cv2.CAP_DSHOW
+)
 
 if not cap.isOpened():
     print("Не удалось открыть камеру.")
@@ -185,7 +192,6 @@ print("Покажи руку.")
 print("Q — выход.")
 
 
-
 while True:
 
     success, frame = cap.read()
@@ -196,7 +202,6 @@ while True:
 
     frame = cv2.flip(frame, 1)
 
-  
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
     result = hands.process(rgb)
@@ -207,24 +212,20 @@ while True:
 
         hand_landmarks = result.multi_hand_landmarks[0]
 
-      
         mp_draw.draw_landmarks(
             frame,
             hand_landmarks,
             mp_hands.HAND_CONNECTIONS
         )
 
-        
         raw_gesture = classify_gesture(
             hand_landmarks.landmark
         )
 
-    
     history.append(raw_gesture)
 
     gesture = stable_gesture(history)
 
-  
     cv2.rectangle(
         frame,
         (20, 20),
@@ -259,7 +260,6 @@ while True:
 
     if key == ord("q"):
         break
-
 
 
 cap.release()

@@ -1,19 +1,32 @@
-class GestureController:
-    """
-    Состояния:
+"""
+gesture_controller.py
+
+Controls the chess move selection state machine for gesture input.
+
+The controller translates stabilized gestures and mapped chess squares
+into a move-selection workflow:
 
     IDLE
-        FIST -> выбрать клетку
-
+      FIST
+      ↓
     SELECTING
-        FIST -> менять выбранную клетку
-        TWO_FINGERS -> начать движение
-        OPEN_PALM -> отмена
+      FIST → change selected square
+      TWO_FINGERS → start moving
+      OPEN_PALM → cancel
 
     MOVING
-        TWO_FINGERS -> менять destination
-        FIST -> отменить движение и выбрать другую клетку
-        OPEN_PALM -> подтвердить ход
+      TWO_FINGERS → change destination square
+      FIST → cancel movement and select another piece
+      OPEN_PALM → confirm the move
+
+The controller does not execute chess moves itself. It only returns a
+confirmed pair of source and destination squares.
+"""
+
+
+class GestureController:
+    """
+    Manage the gesture-based chess move selection state machine.
     """
 
     def __init__(self):
@@ -22,6 +35,7 @@ class GestureController:
         self.destination_square = None
 
     def reset(self):
+        """Reset the controller to the initial IDLE state."""
         self.state = "IDLE"
         self.selected_square = None
         self.destination_square = None
@@ -33,20 +47,17 @@ class GestureController:
         finger_square
     ):
         """
-        Возвращает:
+        Process a gesture and update the current move-selection state.
 
-            None
-                если ход ещё не подтверждён
+        Returns:
+            None if no move has been confirmed.
 
-            (from_square, to_square)
-                если пользователь подтвердил ход ладонью
+            (from_square, to_square) when the user confirms a move
+            with an open palm.
         """
-
         committed_move = None
 
-       
         if self.state == "IDLE":
-
             self.selected_square = None
             self.destination_square = None
 
@@ -55,45 +66,25 @@ class GestureController:
                     self.selected_square = palm_square
                     self.state = "SELECTING"
 
-       
         elif self.state == "SELECTING":
-
-            # ✊
-            # Можно двигать кулак и выбирать другую клетку
             if gesture == "FIST":
-
                 if palm_square is not None:
                     self.selected_square = palm_square
 
-            # ✌️
-            # Начинаем движение выбранной фигуры
             elif gesture == "TWO_FINGERS":
-
                 if self.selected_square is not None:
-
                     self.destination_square = finger_square
                     self.state = "MOVING"
 
-            # 🖐️
-            # Отмена
             elif gesture == "OPEN_PALM":
-
                 self.reset()
 
-        
         elif self.state == "MOVING":
-
-            # ✌️
-            # Двигаем destination
             if gesture == "TWO_FINGERS":
-
                 if finger_square is not None:
                     self.destination_square = finger_square
 
-            # ✊
-            # Отмена движения + выбор другой фигуры
             elif gesture == "FIST":
-
                 self.destination_square = None
 
                 if palm_square is not None:
@@ -102,10 +93,7 @@ class GestureController:
                 else:
                     self.state = "SELECTING"
 
-            # 🖐️
-            # Подтверждаем
             elif gesture == "OPEN_PALM":
-
                 if (
                     self.selected_square is not None
                     and self.destination_square is not None
