@@ -4,6 +4,7 @@ class BoardMapper:
     в шахматные клетки.
     """
 
+
     def __init__(
         self,
         left=0,
