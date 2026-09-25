@@ -16,6 +16,12 @@ ChessSight allows you to play chess on an online chessboard using your voice and
 - Visual gesture debugging
 - Holographic overlay for gesture interaction
 
+  
+### Supported platform
+
+Currently designed to work with **Chess.com**.
+
+
 ## Control Modes
 
 ### Voice Mode
