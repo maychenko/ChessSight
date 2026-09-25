@@ -1,43 +1,48 @@
+"""
+voice_router.py
+
+Runs background speech recognition for global mode switching.
+
+The router is separate from gameplay voice commands.
+It continuously listens for commands such as "жесты" and "голос"
+and puts recognized text into a thread-safe queue.
+"""
+
 import threading
 import queue
+
 import speech_recognition as sr
 
 
-
 def detect_mode_command(text):
+    """Return the requested mode or None if no mode command is found."""
 
     if not text:
         return None
 
     text = text.lower().strip()
 
-    # Небольшая очистка
     text = text.replace(",", " ")
     text = text.replace(".", " ")
     text = " ".join(text.split())
 
-    
     gesture_phrases = [
         "режим жестов",
         "режим жест",
         "режим жесто",
         "режим жес",
         "режим жэс",
-
         "жестовый режим",
         "жестовый",
-
         "жестами",
         "жесты",
         "жестов режим",
     ]
 
     for phrase in gesture_phrases:
-
         if phrase in text:
             return "GESTURE"
 
-   
     voice_phrases = [
         "голосовой режим",
         "режим голоса",
@@ -47,15 +52,14 @@ def detect_mode_command(text):
     ]
 
     for phrase in voice_phrases:
-
         if phrase in text:
             return "VOICE"
 
     return None
 
 
-
 class VoiceRouter:
+    """Listen for mode-switching commands in a background thread."""
 
     def __init__(self):
         self.recognizer = sr.Recognizer()
@@ -68,8 +72,8 @@ class VoiceRouter:
 
         self.commands = queue.Queue()
 
-  
     def start(self):
+        """Start the background voice-recognition thread."""
 
         if self.running:
             return
@@ -85,8 +89,8 @@ class VoiceRouter:
 
         print("[VOICE ROUTER] Запущен")
 
-    
     def stop(self):
+        """Stop the background voice-recognition thread."""
 
         self.running = False
 
@@ -95,8 +99,8 @@ class VoiceRouter:
 
         print("[VOICE ROUTER] Остановлен")
 
-   
     def get(self):
+        """Return the next queued recognized command, if available."""
 
         try:
             return self.commands.get_nowait()
@@ -104,17 +108,15 @@ class VoiceRouter:
         except queue.Empty:
             return None
 
-
     def _run(self):
+        """Run the continuous background speech-recognition loop."""
 
         try:
-
             print("[VOICE ROUTER] Настройка микрофона...")
 
             self.microphone = sr.Microphone()
 
             with self.microphone as source:
-
                 self.recognizer.adjust_for_ambient_noise(
                     source,
                     duration=0.7
@@ -123,7 +125,6 @@ class VoiceRouter:
             print("[VOICE ROUTER] Готов")
 
         except Exception as e:
-
             print(
                 f"[VOICE ROUTER] Ошибка микрофона: {e}"
             )
@@ -132,13 +133,9 @@ class VoiceRouter:
 
             return
 
-        
         while self.running:
-
             try:
-
                 with self.microphone as source:
-
                     audio = self.recognizer.listen(
                         source,
                         timeout=1,
@@ -149,7 +146,6 @@ class VoiceRouter:
                     break
 
                 try:
-
                     text = self.recognizer.recognize_google(
                         audio,
                         language="ru-RU"
@@ -158,7 +154,6 @@ class VoiceRouter:
                     text = text.lower().strip()
 
                     if text:
-
                         print(
                             f"[VOICE ROUTER] Услышал: {text}"
                         )
@@ -169,7 +164,6 @@ class VoiceRouter:
                     pass
 
                 except sr.RequestError as e:
-
                     print(
                         f"[VOICE ROUTER] "
                         f"Ошибка Google Speech: {e}"
@@ -179,9 +173,7 @@ class VoiceRouter:
                 continue
 
             except Exception as e:
-
                 if self.running:
-
                     print(
                         f"[VOICE ROUTER] Ошибка: {e}"
                     )

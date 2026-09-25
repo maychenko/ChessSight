@@ -1,8 +1,18 @@
+"""
+board_mapper.py
+
+Maps hand positions from the camera's working area to chessboard squares.
+
+The mapper uses a configurable rectangular working area and converts
+pixel coordinates inside that area into standard chess coordinates such
+as e2 or h7.
+"""
+
+import cv2
+
+
 class BoardMapper:
-    """
-    Переводит положение руки из рабочей зоны камеры
-    в шахматные клетки.
-    """
+    """Convert camera coordinates into chessboard coordinates."""
 
     def __init__(
         self,
@@ -17,6 +27,12 @@ class BoardMapper:
         self.bottom = bottom
 
     def point_to_square(self, point):
+        """
+        Convert a pixel position into a chess square.
+
+        Returns None when the point is outside the configured working
+        area or when no valid chess square can be determined.
+        """
         if point is None:
             return None
 
@@ -40,20 +56,22 @@ class BoardMapper:
         if not (0 <= col < 8 and 0 <= row < 8):
             return None
 
-        files = "abcdefgh"
-
-        file = files[col]
+        file = "abcdefgh"[col]
         rank = 8 - row
 
         return f"{file}{rank}"
 
     def draw_board(self, frame):
-        import cv2
+        """
+        Draw the 8x8 working-area grid on a camera frame.
 
+        This is mainly useful for visualizing the coordinate mapping
+        during gesture development and debugging.
+        """
         for i in range(9):
             x = int(
-                self.left +
-                i * (self.right - self.left) / 8
+                self.left
+                + i * (self.right - self.left) / 8
             )
 
             cv2.line(
@@ -66,8 +84,8 @@ class BoardMapper:
 
         for i in range(9):
             y = int(
-                self.top +
-                i * (self.bottom - self.top) / 8
+                self.top
+                + i * (self.bottom - self.top) / 8
             )
 
             cv2.line(

@@ -1,36 +1,55 @@
+"""
+main.py
+
+Main entry point for ChessSight.
+
+The program combines:
+- voice chess control;
+- background voice mode switching;
+- gesture-based chess control;
+- opponent move detection from board screenshots;
+- screen move execution;
+- debug and holographic overlays.
+
+The active control mode can be switched between VOICE and GESTURE
+using the background voice router.
+"""
+
 import argparse
 import time
 
 import cv2
 import chess
 
-from capture import grab_board, load_region
+from tools.capture import grab_board, load_region
 
-from board_reader import (
+from chesssight.board.board_reader import (
     load_templates,
     changed_squares,
     infer_move_from_diff,
     STABLE_MOVE_FRAMES,
 )
 
-from voice_commands import parse_text_to_move
-from move_executor import execute_move
+from chesssight.voice.voice_commands import parse_text_to_move
+from chesssight.executor.move_executor import execute_move
 
-from voice_router import (
+from chesssight.voice.voice_router import (
     VoiceRouter,
     detect_mode_command,
 )
 
-from gesture.camera import Camera
-from gesture.hand_tracker import HandTracker
-from gesture.gesture_classifier import classify_gesture
-from gesture.board_mapper import BoardMapper
-from gesture.gesture_controller import GestureController
-from gesture.overlay import HolographicBoard
-from gesture.holographic_overlay import HolographicOverlay
+from chesssight.input.camera import Camera
+from chesssight.input.hand_tracker import HandTracker
+from chesssight.control.gesture_classifier import classify_gesture
+from chesssight.control.board_mapper import BoardMapper
+from chesssight.control.gesture_controller import GestureController
+from chesssight.gesture.debug_overlay import HolographicBoard
+from chesssight.ui.holographic_overlay import HolographicOverlay
 
 
 def move_name(move):
+    """Return a readable chess move such as e2-e4."""
+
     return (
         f"{chess.square_name(move.from_square)}"
         f"-"
@@ -39,6 +58,8 @@ def move_name(move):
 
 
 class GestureRuntime:
+    """Manage camera-based gesture control during GESTURE mode."""
+
     def __init__(self, board_region, holographic_overlay):
         self.camera = Camera()
         self.tracker = HandTracker()
@@ -53,13 +74,14 @@ class GestureRuntime:
         self.controller = GestureController()
         self.debug_board = HolographicBoard()
 
-        
         self.holographic_overlay = holographic_overlay
 
         self.gesture_history = []
         self.history_size = 5
 
     def reset(self):
+        """Reset gesture state and clear the holographic overlay."""
+
         self.controller.reset()
         self.gesture_history.clear()
 
@@ -67,11 +89,14 @@ class GestureRuntime:
             self.holographic_overlay.clear()
 
     def close(self):
-    
+        """Release camera and hand-tracking resources."""
+
         self.camera.release()
         self.tracker.close()
 
     def stable_gesture(self, gesture):
+        """Return the most frequent gesture from the recent history."""
+
         self.gesture_history.append(gesture)
 
         if len(self.gesture_history) > self.history_size:
@@ -91,6 +116,15 @@ class GestureRuntime:
         )
 
     def update(self):
+        """
+        Process one camera frame and update gesture control.
+
+        Returns:
+            tuple:
+                processed camera frame,
+                committed move or None.
+        """
+
         frame = self.camera.read()
 
         if frame is None:
@@ -117,8 +151,6 @@ class GestureRuntime:
 
             stable_gesture = self.stable_gesture(gesture)
 
-            
-
             palm = self.tracker.get_palm_position(landmarks)
 
             if palm is not None:
@@ -132,8 +164,6 @@ class GestureRuntime:
                 palm_square = self.mapper.point_to_square(
                     palm_point
                 )
-
-            
 
             finger = self.tracker.get_finger_position(landmarks)
 
@@ -149,8 +179,6 @@ class GestureRuntime:
                     finger_point
                 )
 
-           
-
             committed_move = self.controller.update(
                 stable_gesture,
                 palm_square,
@@ -159,8 +187,6 @@ class GestureRuntime:
 
         else:
             self.gesture_history.clear()
-
-       
 
         cv2.rectangle(
             frame,
@@ -196,7 +222,7 @@ class GestureRuntime:
             (25, 110),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.7,
-            (255, 255, 255),
+            (255, 255, 255, 255),
             2
         )
 
@@ -206,7 +232,7 @@ class GestureRuntime:
             (25, 145),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.7,
-            (255, 255, 255),
+            (255, 255, 255, 255),
             2
         )
 
@@ -216,7 +242,7 @@ class GestureRuntime:
             (25, 180),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.7,
-            (255, 255, 255),
+            (255, 255, 255, 255),
             2
         )
 
@@ -235,8 +261,6 @@ class GestureRuntime:
             self.controller,
             palm_point
         )
-
-    
 
         current_square = None
 
@@ -262,6 +286,7 @@ class GestureRuntime:
 
 
 class OpponentMoveDetector:
+    """Detect and stabilize the opponent's move from board screenshots."""
 
     def __init__(
         self,
@@ -281,6 +306,7 @@ class OpponentMoveDetector:
         self.stable_count = 0
 
     def start(self):
+        """Start monitoring the board from a new baseline screenshot."""
 
         if self.active:
             return
@@ -296,6 +322,7 @@ class OpponentMoveDetector:
         print("[CV] Слежу за доской...")
 
     def stop(self):
+        """Stop board monitoring and clear the current detection state."""
 
         self.active = False
 
@@ -304,6 +331,13 @@ class OpponentMoveDetector:
         self.stable_count = 0
 
     def update(self, board):
+        """
+        Check the board for an opponent move.
+
+        Returns:
+            A detected chess.Move after it remains stable for the
+            configured number of frames, otherwise None.
+        """
 
         if not self.active:
             return None
@@ -364,6 +398,7 @@ class OpponentMoveDetector:
 
 
 def main():
+    """Initialize ChessSight and run the main game loop."""
 
     parser = argparse.ArgumentParser()
 
@@ -386,7 +421,6 @@ def main():
         if args.side == "white"
         else chess.BLACK
     )
-
 
     region = load_region()
 
@@ -428,7 +462,6 @@ def main():
 
         while not board.is_game_over():
 
-           
             while True:
 
                 text = voice_router.get()
@@ -438,7 +471,6 @@ def main():
 
                 command = detect_mode_command(text)
 
-               
                 if command:
 
                     if command != mode_state["mode"]:
@@ -453,7 +485,6 @@ def main():
 
                         if command == "GESTURE":
 
-                            
                             if gesture_runtime is None:
 
                                 gesture_runtime = GestureRuntime(
@@ -463,7 +494,6 @@ def main():
 
                             gesture_runtime.reset()
 
-                            
                             if hasattr(
                                 holographic_overlay,
                                 "show"
@@ -471,8 +501,6 @@ def main():
                                 holographic_overlay.show()
 
                         else:
-
-                        
 
                             if gesture_runtime is not None:
                                 gesture_runtime.reset()
@@ -488,7 +516,6 @@ def main():
 
                     continue
 
-                
                 if (
                     mode_state["mode"] == "VOICE"
                     and board.turn == my_color
@@ -522,7 +549,6 @@ def main():
 
                         time.sleep(0.35)
 
-           
             if mode_state["mode"] == "GESTURE":
 
                 if gesture_runtime is None:
@@ -543,7 +569,6 @@ def main():
                         frame
                     )
 
-                
                 if committed_move:
 
                     from_square, to_square = committed_move
@@ -599,7 +624,6 @@ def main():
                 if key == ord("q"):
                     break
 
-           
             if board.turn != my_color:
 
                 opponent_detector.start()
@@ -632,7 +656,6 @@ def main():
         if gesture_runtime is not None:
             gesture_runtime.close()
 
-        
         if holographic_overlay is not None:
             holographic_overlay.close()
 

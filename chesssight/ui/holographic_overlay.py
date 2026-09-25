@@ -1,3 +1,19 @@
+"""
+holographic_overlay.py
+
+Provides a transparent, click-through Win32 overlay that is displayed
+directly over the real chessboard.
+
+The overlay shows:
+- the current hand square;
+- the selected square;
+- the destination square;
+- the movement trajectory.
+
+The window stays above other windows while remaining transparent to
+mouse input.
+"""
+
 import ctypes
 import threading
 import time
@@ -10,6 +26,7 @@ import win32con
 import win32gui
 import win32ui
 
+
 try:
     ctypes.windll.shcore.SetProcessDpiAwareness(2)
 except Exception:
@@ -20,6 +37,8 @@ except Exception:
 
 
 class HolographicOverlay:
+    """Display a transparent chess interaction overlay on the screen."""
+
     def __init__(self, region):
         self.region = region
 
@@ -55,8 +74,9 @@ class HolographicOverlay:
             f"{self.width}x{self.height}"
         )
 
-   
     def _window_proc(self, hwnd, msg, wparam, lparam):
+        """Handle messages for the overlay window."""
+
         if msg == win32con.WM_NCHITTEST:
             return win32con.HTTRANSPARENT
 
@@ -77,6 +97,8 @@ class HolographicOverlay:
         )
 
     def _create_window(self):
+        """Create and initialize the native Win32 overlay window."""
+
         hinstance = win32api.GetModuleHandle(None)
 
         wnd_class = win32gui.WNDCLASS()
@@ -126,6 +148,8 @@ class HolographicOverlay:
         self._message_thread.start()
 
     def _message_loop(self):
+        """Process pending Windows messages for the overlay."""
+
         while self.running:
             try:
                 win32gui.PumpWaitingMessages()
@@ -134,8 +158,9 @@ class HolographicOverlay:
 
             time.sleep(0.005)
 
-
     def _force_topmost(self):
+        """Keep the overlay window above other windows."""
+
         if not self.hwnd:
             return
 
@@ -151,6 +176,8 @@ class HolographicOverlay:
         )
 
     def _topmost_watchdog(self):
+        """Periodically restore the overlay's topmost position."""
+
         while self.running:
             try:
                 if self.hwnd and self.visible:
@@ -160,8 +187,9 @@ class HolographicOverlay:
 
             time.sleep(0.05)
 
-    
     def show(self):
+        """Show the overlay without activating it."""
+
         self.visible = True
 
         if not self.hwnd:
@@ -176,6 +204,8 @@ class HolographicOverlay:
         self._render()
 
     def hide(self):
+        """Hide the overlay."""
+
         self.visible = False
 
         if not self.hwnd:
@@ -186,7 +216,6 @@ class HolographicOverlay:
             win32con.SW_HIDE
         )
 
-   
     def draw(
         self,
         current_square=None,
@@ -195,7 +224,8 @@ class HolographicOverlay:
         trajectory=None,
         **kwargs
     ):
-        """Метод-обертка для совместимости с main.py"""
+        """Compatibility wrapper for callers using the draw method."""
+
         self.update(
             current_square=current_square,
             selected_square=selected_square,
@@ -210,6 +240,8 @@ class HolographicOverlay:
         destination_square=None,
         trajectory=None
     ):
+        """Update the current overlay state and redraw it if visible."""
+
         with self._lock:
             self.current_square = current_square
             self.selected_square = selected_square
@@ -223,8 +255,9 @@ class HolographicOverlay:
         if self.visible:
             self._render()
 
-    
     def _square_center(self, square):
+        """Return the pixel center of a chess square."""
+
         if square is None:
             return None
 
@@ -245,6 +278,8 @@ class HolographicOverlay:
         )
 
     def _square_rect(self, square):
+        """Return the pixel rectangle of a chess square."""
+
         if square is None:
             return None
 
@@ -266,7 +301,6 @@ class HolographicOverlay:
             int((row + 1) * cell_h)
         )
 
-    
     def _draw_square(
         self,
         frame,
@@ -274,6 +308,8 @@ class HolographicOverlay:
         color,
         thickness=3
     ):
+        """Draw a highlighted rectangle around a chess square."""
+
         rect = self._square_rect(square)
 
         if rect is None:
@@ -290,6 +326,8 @@ class HolographicOverlay:
         )
 
     def _render(self):
+        """Render the current overlay state to the layered window."""
+
         if not self.hwnd or not self.visible:
             return
 
@@ -304,7 +342,6 @@ class HolographicOverlay:
             destination = self.destination_square
             trajectory = list(self.trajectory)
 
-       
         for i in range(9):
             x = int(i * self.width / 8)
 
@@ -327,7 +364,6 @@ class HolographicOverlay:
                 1
             )
 
-        
         self._draw_square(
             frame,
             current,
@@ -335,7 +371,6 @@ class HolographicOverlay:
             3
         )
 
-    
         self._draw_square(
             frame,
             selected,
@@ -343,7 +378,6 @@ class HolographicOverlay:
             5
         )
 
-        
         self._draw_square(
             frame,
             destination,
@@ -351,7 +385,6 @@ class HolographicOverlay:
             5
         )
 
-       
         if len(trajectory) >= 2:
             points = []
 
@@ -373,8 +406,9 @@ class HolographicOverlay:
 
         self._update_layered_window(frame)
 
-   
     def _update_layered_window(self, frame):
+        """Update the transparent Win32 window from an RGBA frame."""
+
         if not self.hwnd:
             return
 
@@ -480,7 +514,6 @@ class HolographicOverlay:
                 win32con.DIB_RGB_COLORS
             )
 
-            
             blend = (
                 win32con.AC_SRC_OVER,
                 0,
@@ -510,8 +543,9 @@ class HolographicOverlay:
                 screen_dc_handle
             )
 
-    
     def clear(self):
+        """Clear all overlay state and remove its visible graphics."""
+
         with self._lock:
             self.current_square = None
             self.selected_square = None
@@ -530,8 +564,9 @@ class HolographicOverlay:
             empty
         )
 
-    
     def close(self):
+        """Stop the overlay and destroy its native window."""
+
         self.running = False
         self.visible = False
 

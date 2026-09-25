@@ -1,7 +1,21 @@
+"""
+debug_overlay.py
+
+Draws a debug chessboard overlay on the camera frame.
+
+The overlay is used only for visual debugging of gesture control.
+It shows the virtual board coordinates, selected square, destination
+square, movement direction, and current palm position.
+
+This overlay is displayed inside the OpenCV camera window and does not
+interact with the real chessboard on the screen.
+"""
+
 import cv2
 
 
 class HolographicBoard:
+    """Render a virtual chessboard for gesture interaction."""
 
     def __init__(
         self,
@@ -15,14 +29,20 @@ class HolographicBoard:
 
     @property
     def right(self):
+        """Return the right screen coordinate of the board."""
         return self.left + self.size
 
     @property
     def bottom(self):
+        """Return the bottom screen coordinate of the board."""
         return self.top + self.size
 
     def square_center(self, square):
+        """
+        Return the screen position of a chess square's center.
 
+        The board uses the standard orientation with White at the bottom.
+        """
         if not square:
             return None
 
@@ -33,32 +53,32 @@ class HolographicBoard:
 
         cell = self.size / 8
 
-        x = self.left + (
-            file_index * cell
-        ) + cell / 2
+        x = (
+            self.left
+            + file_index * cell
+            + cell / 2
+        )
 
-        y = self.top + (
-            (7 - rank_index) * cell
-        ) + cell / 2
+        y = (
+            self.top
+            + (7 - rank_index) * cell
+            + cell / 2
+        )
 
         return int(x), int(y)
 
     def draw(self, frame, controller, palm_point=None):
+        """
+        Draw the board and current gesture-control state on a frame.
 
+        The controller provides the selected and destination squares.
+        The optional palm point is displayed as the current hand position.
+        """
         cell = self.size / 8
-        
-        
+
         for i in range(9):
-
-            x = int(
-                self.left +
-                i * cell
-            )
-
-            y = int(
-                self.top +
-                i * cell
-            )
+            x = int(self.left + i * cell)
+            y = int(self.top + i * cell)
 
             cv2.line(
                 frame,
@@ -76,13 +96,11 @@ class HolographicBoard:
                 1
             )
 
-
         for i, file_name in enumerate("abcdefgh"):
-
             x = int(
-                self.left +
-                i * cell +
-                cell / 2
+                self.left
+                + i * cell
+                + cell / 2
             )
 
             cv2.putText(
@@ -95,15 +113,13 @@ class HolographicBoard:
                 1
             )
 
-    
         for i in range(8):
-
             rank = 8 - i
 
             y = int(
-                self.top +
-                i * cell +
-                cell / 2
+                self.top
+                + i * cell
+                + cell / 2
             )
 
             cv2.putText(
@@ -119,11 +135,9 @@ class HolographicBoard:
         selected = controller.selected_square
 
         if selected:
-
             center = self.square_center(selected)
 
             if center:
-
                 x, y = center
 
                 cv2.rectangle(
@@ -140,15 +154,12 @@ class HolographicBoard:
                     4
                 )
 
-        
         destination = controller.destination_square
 
         if destination:
-
             center = self.square_center(destination)
 
             if center:
-
                 x, y = center
 
                 cv2.rectangle(
@@ -165,26 +176,21 @@ class HolographicBoard:
                     4
                 )
 
-        
         if selected and destination:
+            start = self.square_center(selected)
+            end = self.square_center(destination)
 
-            p1 = self.square_center(selected)
-            p2 = self.square_center(destination)
-
-            if p1 and p2:
-
+            if start and end:
                 cv2.arrowedLine(
                     frame,
-                    p1,
-                    p2,
+                    start,
+                    end,
                     (0, 255, 255),
                     3,
                     tipLength=0.15
                 )
 
-        
         if palm_point:
-
             x, y = palm_point
 
             cv2.circle(
